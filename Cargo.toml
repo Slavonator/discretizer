@@ -3,8 +3,8 @@ name = "overwhelement"
 version = "0.1.0"
 edition = "2024"
 
-[dependencies]
-log = "0.4"
+[lib]
+path = "src/lib.rs"
 
 [dev-dependencies]
 image = "0.25"
@@ -19,16 +19,15 @@ path = "examples/readme_images/pipeline_diagram.rs"
 
 [[example]]
 name = "plane-viewport"
-path = "examples/readme_images/plane_viewport.rs"
+path = "examples/readme_images/plane_view.rs"
 
 [[example]]
 name = "multiple-viewports"
-path = "examples/readme_images/multiple_viewports.rs"
+path = "examples/readme_images/multiple_views.rs"
 
 [[example]]
 name = "text-image-viewer"
 path = "examples/image_viewers/text_viewer.rs"
-
 
 [[example]]
 name = "8color-text-image-viewer"
