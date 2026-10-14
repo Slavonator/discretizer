@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+log = "0.4"
 
 [dev-dependencies]
 image = "0.25"
@@ -32,3 +33,7 @@ path = "examples/image_viewers/text_viewer.rs"
 [[example]]
 name = "8color-text-image-viewer"
 path = "examples/image_viewers/8color_text_viewer.rs"
+
+[[example]]
+name = "ascii-cube"
+path = "examples/3d/ascii_cube.rs"

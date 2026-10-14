@@ -1,51 +1,25 @@
-/// Вершина геометрии на плоскости
+use super::super::Attributes;
+
+/// Вершина геометрии на плоскости.
+///
+/// Координаты и глубина — структурные поля, дискретизатор работает
+/// с ними напрямую. Всё остальное — в `attr`.
 #[derive(Copy, Clone, Debug)]
-pub struct Vertex {
-    /// Координата x вершины
+pub struct Vertex<A: Attributes> {
     pub x: f32,
-    /// Координата y вершины
     pub y: f32,
-    /// Удалённость вершины от наблюдателя
     pub depth: f32,
-    /// Текстурная координата u вершины
-    pub u: f32,
-    /// Текстурная координата v вершины
-    pub v: f32,
-    /// Нормали вершины
-    pub normal: [f32; 3],
-    /// Освещённость вершины
-    pub luminance: f32,
+    pub attr: A,
 }
 
-impl Default for Vertex {
-    fn default() -> Self {
-        Vertex {
-            x: 0.0,
-            y: 0.0,
-            depth: 0.0,
-            u: 0.0,
-            v: 0.0,
-            normal: [0.0; 3],
-            luminance: 1.0,
-        }
+impl<A: Attributes> Vertex<A> {
+    /// Вершина на глубине 0.
+    pub fn new(x: f32, y: f32, attr: A) -> Self {
+        Vertex { x, y, depth: 0.0, attr }
     }
-}
 
-impl Vertex {
-    /// Создаёт и возвращает новый экземпляр вершины с заданными координатами
-    pub fn new(x: f32, y: f32) -> Self {
-        Vertex { x, y, ..Default::default() }
-    }
-    /// Создаёт и возвращает новый экземпляр вершины с заданными координатами и глубиной
-    pub fn with_depth(x: f32, y: f32, depth: f32) -> Self {
-        Vertex { x, y, depth, ..Default::default() }
-    }
-    /// Создаёт и возвращает новый экземпляр вершины с заданными координатами и текстурными координатами
-    pub fn with_uv(x: f32, y: f32, u: f32, v: f32) -> Self {
-        Vertex { x, y, u, v, ..Default::default() }
-    }
-    /// Создаёт и возвращает новый экземпляр вершины с заданными координатами, глубиной и текструрными координатами
-    pub fn with_depth_uv(x: f32, y: f32, depth: f32, u: f32, v: f32) -> Self {
-        Vertex { x, y, depth, u, v, ..Default::default()}
+    /// Вершина с заданной глубиной.
+    pub fn with_depth(x: f32, y: f32, depth: f32, attr: A) -> Self {
+        Vertex { x, y, depth, attr }
     }
 }

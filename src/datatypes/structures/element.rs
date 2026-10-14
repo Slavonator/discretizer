@@ -1,14 +1,28 @@
-/// Дискрета
+use super::super::{Attributes, EMPTY_OBJECT_ID, VOID_DEPTH};
+
+/// Дискрета: элемент, попавший в клетку буфера.
+///
+/// `object_id` и `depth` — структурные поля, по ним работает сортировка
+/// и выбор места. `attr` — пользовательские атрибуты. Слой, из которого
+/// пришёл элемент, определяется позицией клетки в `ElementBuffer`.
 #[derive(Copy, Clone, Debug)]
-pub struct Element {
-    /// Идентификатор объекта, попавшего в дискрету. Равен u32::MAX, если объекта нет
+pub struct Element<A: Attributes> {
+    /// Идентификатор объекта. `EMPTY_OBJECT_ID`, если объекта нет.
     pub object_id: u32,
-    /// Удалённость объекта, попавшего в дискрету от наблюдателя. Равен f32::INFINITY, если объекта нет
+    /// Удалённость от наблюдателя. `VOID_DEPTH`, если объекта нет.
     pub depth: f32,
-    /// Слой объекта, попавшего в дискрету. Равен 0, если слоёв нет
-    pub layer: u32,
-    /// Цвет объекта, попавшего в дискрету.
-    pub color: [u8; 3],
-    /// Освещенность объекта, попавшего в дискрету
-    pub luminance: f32,
+    /// Пользовательские атрибуты.
+    pub attr: A,
+}
+
+impl<A: Attributes> Element<A> {
+    /// Заполнитель для незанятых слотов буфера.
+    #[inline]
+    pub fn placeholder() -> Self {
+        Element {
+            object_id: EMPTY_OBJECT_ID,
+            depth: VOID_DEPTH,
+            attr: A::placeholder(),
+        }
+    }
 }

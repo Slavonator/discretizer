@@ -1,68 +1,35 @@
-use super::ShaderPool;
-use super::Viewport;
-use super::Plane;
-use super::Vertex;
-use super::Triangle;
-use super::Line;
+use super::{Plane, Vertex, Triangle};
+use super::super::Attributes;
 
-/// Сцена, контейнер высшего уровня, содержащий в себе всю информацию об изначальной сцене
-#[derive(Clone)]
-pub struct Scene {
-    /// Список всех шейдеров
-    pub shader_pool: ShaderPool,
-    /// Список всех вьюпортов
-    pub viewports: Vec<Viewport>,
-    /// Список всех плоскостей
+/// Чистая геометрия сцены. Не содержит информации об отображении.
+#[derive(Clone, Debug)]
+pub struct Scene<A: Attributes> {
     pub planes: Vec<Plane>,
-    /// Список всех вершин
-    pub vertices: Vec<Vertex>,
-    /// Список всех треугольников
+    pub vertices: Vec<Vertex<A>>,
     pub triangles: Vec<Triangle>,
-    /// Список всех линий
-    pub lines: Vec<Line>,
 }
 
-
-impl Scene {
-    /// Создаёт и возвращает новый экземпляр сцены, с пустыми полями
+impl<A: Attributes> Scene<A> {
     pub fn new() -> Self {
-        Self{
-            shader_pool: ShaderPool::new(),
-            viewports: Vec::new(),
+        Self {
             planes: Vec::new(),
             vertices: Vec::new(),
             triangles: Vec::new(),
-            lines: Vec::new()
         }
     }
-    
-    /// Добавляет вьюпорт в список вьюпортов сцены
-    pub fn add_viewport(&mut self, vp: Viewport) -> u32 {
-        self.viewports.push(vp);
-        (self.viewports.len() - 1) as u32
-    }
 
-    /// Добавляет плоскость в список плоскостей сцены
-    pub fn add_plane(&mut self, plane: Plane) -> u32 {
+    pub fn add_plane(&mut self, plane: Plane) -> usize {
         self.planes.push(plane);
-        (self.planes.len() - 1) as u32
+        self.planes.len() - 1
     }
 
-    /// Добавляет плоскость в список плоскостей сцены
-    pub fn add_vertex(&mut self, vertex: Vertex) -> u32 {
+    pub fn add_vertex(&mut self, vertex: Vertex<A>) -> usize {
         self.vertices.push(vertex);
-        (self.vertices.len() - 1) as u32
+        self.vertices.len() - 1
     }
 
-    /// Добавляет плоскость в список плоскостей сцены
-    pub fn add_triangle(&mut self, triangle: Triangle) -> u32 {
+    pub fn add_triangle(&mut self, triangle: Triangle) -> usize {
         self.triangles.push(triangle);
-        (self.triangles.len() - 1) as u32
-    }
-
-    /// Добавляет плоскость в список плоскостей сцены
-    pub fn add_line(&mut self, line: Line) -> u32 {
-        self.lines.push(line);
-        (self.lines.len() - 1) as u32
+        self.triangles.len() - 1
     }
 }
