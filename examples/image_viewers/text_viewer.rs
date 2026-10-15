@@ -1,4 +1,4 @@
-use overwhelement::*;
+use discretizer::*;
 use image::{open, RgbaImage};
 use std::env;
 use terminal_size::terminal_size;

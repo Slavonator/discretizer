@@ -1,4 +1,4 @@
-use overwhelement::*;
+use discretizer::*;
 use image::{ImageBuffer, Rgba};
 use ab_glyph::{FontRef, PxScale};
 

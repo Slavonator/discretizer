@@ -1,7 +1,7 @@
 use ab_glyph::{FontRef, PxScale};
 use image::{ImageBuffer, Rgba};
 use imageproc::drawing::draw_text_mut;
-use overwhelement::*;
+use discretizer::*;
 
 const W: usize = 800;
 const H: usize = 800;
