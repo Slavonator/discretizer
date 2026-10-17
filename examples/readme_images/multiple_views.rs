@@ -171,9 +171,10 @@ fn main() {
     config.add_layer(Layer::new(
         plane0_idx,
         vec![(view0, port0), (view1, port1), (view2, port2)],
+        1
     ));
     // Слой 1: аннотации — только в левую панель.
-    config.add_layer(Layer::new(plane1_idx, vec![(view0, port0)]));
+    config.add_layer(Layer::new(plane1_idx, vec![(view0, port0)], 1));
 
     // ---------- Дискретизация ----------
     let task = Task::new(scene, config);

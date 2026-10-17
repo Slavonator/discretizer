@@ -120,7 +120,7 @@ fn main() {
     let mut config = Configuration::new(W, H);
     let view_idx = config.add_view(view);
     let port_idx = config.add_port(port);
-    config.add_layer(Layer::new(plane_idx, vec![(view_idx, port_idx)]));
+    config.add_layer(Layer::new(plane_idx, vec![(view_idx, port_idx)], 1));
 
     let task = Task::new(scene, config);
     let buffer = discretize(&task);

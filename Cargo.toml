@@ -12,6 +12,9 @@ imageproc = "0.25"
 rusttype = "0.9"
 ab_glyph = "0.2"
 terminal_size = "0.4"
+crossterm = "0.28"
+glam = "0.34.1"
+tobj = "4"
 
 [[example]]
 name = "pipeline"
@@ -26,13 +29,18 @@ name = "multiple-viewports"
 path = "examples/readme_images/multiple_views.rs"
 
 [[example]]
-name = "text-image-viewer"
-path = "examples/image_viewers/text_viewer.rs"
+name = "ascii-image-viewer"
+path = "examples/image_viewers/ascii_image_viewer.rs"
 
 [[example]]
-name = "8color-text-image-viewer"
-path = "examples/image_viewers/8color_text_viewer.rs"
+name = "8color-ascii-image-viewer"
+path = "examples/image_viewers/8color_ascii_image_viewer.rs"
 
 [[example]]
-name = "ascii-cube"
-path = "examples/3d/ascii_cube.rs"
+name = "ascii-video-viewer"
+path = "examples/video_viewers/ascii_video_viewer.rs"
+
+[[example]]
+name = "8color-ascii-video-viewer"
+path = "examples/video_viewers/8color_ascii_video_viewer.rs"
+

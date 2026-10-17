@@ -170,7 +170,6 @@ fn main() {
     );
 
     let mut config = Configuration::new(out_w, out_h);
-    config.max_overlap = 1;
 
     let view_idx = config.add_view(View::new(0.0, 0.0, width, height));
 
@@ -179,7 +178,7 @@ fn main() {
         .with_buffer_offset(offset_x, offset_y);
     let port_idx = config.add_port(port);
 
-    config.add_layer(Layer::new(plane_idx, vec![(view_idx, port_idx)]));
+    config.add_layer(Layer::new(plane_idx, vec![(view_idx, port_idx)], 1));
 
     // 6. Задача дискретизации.
     let task = Task::new(scene, config);

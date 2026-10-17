@@ -1,6 +1,7 @@
 use discretizer::*;
 use image::{open, RgbaImage};
 use std::env;
+use std::io::Write;
 use terminal_size::terminal_size;
 
 /// Атрибуты вершины для вьюера: UV-координаты сэмплирования текстуры.
@@ -24,8 +25,6 @@ impl Attributes for Uv {
 }
 
 /// Считает оффсет, центрирующий вид в порту при заданном аспекте дискреты.
-/// Аспект — это отношение высоты символа к его ширине. В терминале обычно 2:1,
-/// то есть `aspect = 0.5`.
 fn offset_to_center(
     buffer_width: u32,
     buffer_height: u32,
@@ -55,6 +54,22 @@ fn offset_to_center(
     (offset_x, offset_y)
 }
 
+/// Возвращает RGB-цвет текстуры для клетки буфера `(x, y)` слоя 0.
+fn sample_color(buffer: &ElementBuffer<Uv>, img: &RgbaImage, x: usize, y: usize) -> (u8, u8, u8) {
+    let stack = buffer.stack(x, y, 0).unwrap_or(&[]);
+    match stack.first() {
+        Some(elem) => {
+            let u = elem.attr.u.clamp(0.0, 1.0);
+            let v = elem.attr.v.clamp(0.0, 1.0);
+            let px = (u * (img.width() - 1) as f32) as u32;
+            let py = (v * (img.height() - 1) as f32) as u32;
+            let [r, g, b, _a] = img.get_pixel(px, py).0;
+            (r, g, b)
+        }
+        None => (0, 0, 0),
+    }
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
@@ -72,8 +87,12 @@ fn main() {
     let out_w = out_w.0 as usize;
     let out_h = out_h.0 as usize;
 
-    // Терминальные символы обычно вдвое выше, чем шире: aspect = 0.5.
-    let aspect: f32 = 0.5;
+    // Каждая ячейка терминала вмещает 2 субпикселя по вертикали.
+    let buf_w = out_w;
+    let buf_h = out_h * 2;
+
+    // Полу-блок `▀` примерно квадратный => aspect = 1.0.
+    let aspect: f32 = 1.0;
 
     // 1. Сцена с UV-атрибутами.
     let mut scene: Scene<Uv> = Scene::new();
@@ -93,11 +112,10 @@ fn main() {
 
     // 5. Конфигурация вывода.
     let (offset_x, offset_y) = offset_to_center(
-        out_w as u32, out_h as u32, width, height, aspect,
+        buf_w as u32, buf_h as u32, width, height, aspect,
     );
 
-    let mut config = Configuration::new(out_w, out_h);
-    config.max_overlap = 1;
+    let mut config = Configuration::new(buf_w, buf_h);
 
     let view_idx = config.add_view(View::new(0.0, 0.0, width, height));
 
@@ -106,32 +124,32 @@ fn main() {
         .with_buffer_offset(offset_x, offset_y);
     let port_idx = config.add_port(port);
 
-    config.add_layer(Layer::new(plane_idx, vec![(view_idx, port_idx)]));
+    config.add_layer(Layer::new(plane_idx, vec![(view_idx, port_idx)], 1));
 
     // 6. Задача дискретизации.
     let task = Task::new(scene, config);
 
     // 7. Дискретизация.
-    let buffer = discretize(&task);
+    let buffer: ElementBuffer<Uv> = discretize(&task);
 
-    // 8. Интерпретация: сэмплируем текстуру по UV ближайшего элемента.
-    // Пустая клетка (пустой стек) заливается чёрным.
-    for y in 0..buffer.height {
-        for x in 0..buffer.width {
-            let stack = buffer.stack(x, y, 0).unwrap_or(&[]);
-            let (r, g, b) = match stack.first() {
-                Some(elem) => {
-                    let u = elem.attr.u.clamp(0.0, 1.0);
-                    let v = elem.attr.v.clamp(0.0, 1.0);
-                    let px = (u * (img.width() - 1) as f32) as u32;
-                    let py = (v * (img.height() - 1) as f32) as u32;
-                    let [r, g, b, _a] = img.get_pixel(px, py).0;
-                    (r, g, b)
-                }
-                None => (0, 0, 0),
-            };
-            print!("\x1b[48;2;{};{};{}m \x1b[0m", r, g, b);
+    // 8. Вывод: на одну ячейку терминала — 2 субпикселя.
+    //    `▀` закрашивает верхнюю половину цветом fg, нижняя — цвет фона.
+    let stdout = std::io::stdout();
+    let mut out = std::io::BufWriter::new(stdout.lock());
+
+    for cy in 0..out_h {
+        let y_top = cy * 2;
+        let y_bot = cy * 2 + 1;
+        for x in 0..out_w {
+            let (tr, tg, tb) = sample_color(&buffer, &img, x, y_top);
+            let (br, bg, bb) = sample_color(&buffer, &img, x, y_bot);
+            write!(
+                out,
+                "\x1b[38;2;{};{};{}m\x1b[48;2;{};{};{}m▀",
+                tr, tg, tb, br, bg, bb
+            )
+            .unwrap();
         }
-        println!();
+        writeln!(out, "\x1b[0m").unwrap();
     }
 }

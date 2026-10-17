@@ -102,7 +102,7 @@ fn main() {
     let view_idx = config.add_view(View::new(0.0, 0.0, vw, vh));
     let port_idx = config.add_port(Port::new(ScalingMode::Cover));
 
-    config.add_layer(Layer::new(plane_idx, vec![(view_idx, port_idx)]));
+    config.add_layer(Layer::new(plane_idx, vec![(view_idx, port_idx)], 1));
 
     // --- Дискретизация ---
     let task = Task::new(scene, config);

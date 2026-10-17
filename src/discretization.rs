@@ -22,11 +22,12 @@ pub fn discretize<A: Attributes>(task: &Task<A>) -> ElementBuffer<A> {
         layers_count, u32::MAX
     );
 
+    let capacities: Vec<usize> = config.layers.iter().map(|l| l.capacity).collect();
+
     let mut buffer = ElementBuffer::new(
         config.output_width,
         config.output_height,
-        layers_count,
-        config.max_overlap,
+        capacities,
     );
 
     for (layer_index, layer) in config.layers.iter().enumerate() {
