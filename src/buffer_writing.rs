@@ -119,7 +119,7 @@ pub(crate) fn discretize_triangle<A: Attributes>(
     let w2_start = edge_func(v0.x, v0.y, v1.x, v1.y, start_x, start_y) * inv_area;
 
     for y in min_y..=max_y {
-        let dy = y as f32 - start_y;
+        let dy = y as f32 - min_y as f32;
         let mut w0 = w0_start + dy * dw0_dy;
         let mut w1 = w1_start + dy * dw1_dy;
         let mut w2 = w2_start + dy * dw2_dy;
@@ -144,5 +144,382 @@ pub(crate) fn discretize_triangle<A: Attributes>(
             w1 += dw1_dx;
             w2 += dw2_dx;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[track_caller]
+    fn assert_approx_eq(actual: f32, expected: f32, msg: &str) {
+        let diff = (actual - expected).abs();
+        let scale = expected.abs().max(actual.abs()).max(1.0);
+        assert!(
+            diff <= 1e-5 * scale,
+            "{}: expected {}, got {} (diff {})",
+            msg, expected, actual, diff
+        );
+    }
+
+    fn make_buffer(width: usize, height: usize, capacity: usize) -> ElementBuffer<()> {
+        ElementBuffer::new(width, height, vec![capacity])
+    }
+
+    fn vert<A: Attributes>(x: f32, y: f32, depth: f32, attr: A) -> Vertex<A> {
+        Vertex::with_depth(x, y, depth, attr)
+    }
+
+    // -----------------------------------------------------------------
+    // edge_func
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn edge_func_positive_area_for_ccw() {
+        // (0,0) -> (1,0) -> (0,1) — CCW, удвоенная площадь = 1.
+        assert_approx_eq(edge_func(0.0, 0.0, 1.0, 0.0, 0.0, 1.0), 1.0, "ccw");
+    }
+
+    #[test]
+    fn edge_func_negative_area_for_cw() {
+        assert_approx_eq(edge_func(0.0, 0.0, 0.0, 1.0, 1.0, 0.0), -1.0, "cw");
+    }
+
+    #[test]
+    fn edge_func_zero_for_collinear_points() {
+        assert_approx_eq(edge_func(0.0, 0.0, 1.0, 1.0, 2.0, 2.0), 0.0, "collinear");
+    }
+
+    #[test]
+    fn edge_func_flips_sign_on_swap() {
+        let a = edge_func(0.0, 0.0, 1.0, 0.0, 0.0, 1.0);
+        let b = edge_func(0.0, 0.0, 0.0, 1.0, 1.0, 0.0);
+        assert_approx_eq(a, -b, "swap");
+    }
+
+    #[test]
+    fn edge_func_is_cyclic() {
+        let e1 = edge_func(0.0, 0.0, 1.0, 0.0, 0.0, 1.0);
+        let e2 = edge_func(1.0, 0.0, 0.0, 1.0, 0.0, 0.0);
+        let e3 = edge_func(0.0, 1.0, 0.0, 0.0, 1.0, 0.0);
+        assert_approx_eq(e1, e2, "cyclic");
+        assert_approx_eq(e2, e3, "cyclic");
+    }
+
+    // -----------------------------------------------------------------
+    // discretize_triangle — геометрия
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn triangle_at_origin_fills_expected_cells() {
+        // Треугольник (0,0)-(2,0)-(0,2). Внутри x+y <= 2.
+        // Пиксели с центром внутри: (0,0) @ (0.5,0.5) sum=1;
+        // (1,0) @ (1.5,0.5) sum=2 boundary; (0,1) @ (0.5,1.5) sum=2 boundary.
+        let mut buf = make_buffer(4, 4, 1);
+        let verts = [
+            vert(0.0, 0.0, 0.0, ()),
+            vert(2.0, 0.0, 1.0, ()),
+            vert(0.0, 2.0, 2.0, ()),
+        ];
+        discretize_triangle(&mut buf, &verts, 1, 0, 0, 0, 4, 4);
+
+        let mut cells: Vec<_> = buf.cells().map(|(x, y, _, _)| (x, y)).collect();
+        cells.sort();
+        assert_eq!(cells, vec![(0, 0), (0, 1), (1, 0)]);
+    }
+
+    #[test]
+    fn depth_is_interpolated_at_pixel_centers() {
+        let mut buf = make_buffer(4, 4, 1);
+        let verts = [
+            vert(0.0, 0.0, 0.0, ()),
+            vert(2.0, 0.0, 1.0, ()),
+            vert(0.0, 2.0, 2.0, ()),
+        ];
+        discretize_triangle(&mut buf, &verts, 7, 0, 0, 0, 4, 4);
+
+        // (0,0): w = (0.5, 0.25, 0.25) -> depth 0.75
+        let s = buf.stack(0, 0, 0).unwrap();
+        assert_eq!(s.len(), 1);
+        assert_eq!(s[0].object_id, 7);
+        assert_approx_eq(s[0].depth, 0.75, "depth at (0,0)");
+
+        // (1,0): w = (0, 0.75, 0.25) -> depth 1.25
+        let s = buf.stack(1, 0, 0).unwrap();
+        assert_approx_eq(s[0].depth, 1.25, "depth at (1,0)");
+
+        // (0,1): w = (0, 0.25, 0.75) -> depth 1.75
+        let s = buf.stack(0, 1, 0).unwrap();
+        assert_approx_eq(s[0].depth, 1.75, "depth at (0,1)");
+    }
+
+    #[test]
+    fn winding_order_does_not_affect_result() {
+        let all = [
+            vert(0.0, 0.0, 0.0, ()),
+            vert(2.0, 0.0, 1.0, ()),
+            vert(0.0, 2.0, 2.0, ()),
+        ];
+
+        let mut buf_ccw = make_buffer(4, 4, 1);
+        discretize_triangle(&mut buf_ccw, &[all[0], all[1], all[2]], 1, 0, 0, 0, 4, 4);
+
+        let mut buf_cw = make_buffer(4, 4, 1);
+        discretize_triangle(&mut buf_cw, &[all[0], all[2], all[1]], 1, 0, 0, 0, 4, 4);
+
+        let mut ccw_cells: Vec<_> = buf_ccw.cells().map(|(x, y, _, _)| (x, y)).collect();
+        let mut cw_cells: Vec<_> = buf_cw.cells().map(|(x, y, _, _)| (x, y)).collect();
+        ccw_cells.sort();
+        cw_cells.sort();
+        assert_eq!(ccw_cells, cw_cells, "same cells");
+
+        for &(x, y) in &ccw_cells {
+            let d_ccw = buf_ccw.stack(x, y, 0).unwrap()[0].depth;
+            let d_cw = buf_cw.stack(x, y, 0).unwrap()[0].depth;
+            assert_approx_eq(d_ccw, d_cw, &format!("depth at ({},{})", x, y));
+        }
+    }
+
+    #[test]
+    fn degenerate_triangle_writes_nothing() {
+        let mut buf = make_buffer(4, 4, 1);
+        let verts = [
+            vert(0.5, 0.5, 1.0, ()),
+            vert(1.5, 1.5, 1.0, ()),
+            vert(2.5, 2.5, 1.0, ()),
+        ];
+        discretize_triangle(&mut buf, &verts, 1, 0, 0, 0, 4, 4);
+        assert_eq!(buf.cells().count(), 0);
+    }
+
+    #[test]
+    fn triangle_outside_buffer_writes_nothing() {
+        let mut buf = make_buffer(4, 4, 1);
+        let verts = [
+            vert(-10.0, 0.0, 1.0, ()),
+            vert(-10.0, 3.0, 1.0, ()),
+            vert(-5.0, 0.0, 1.0, ()),
+        ];
+        discretize_triangle(&mut buf, &verts, 1, 0, 0, 0, 4, 4);
+        assert_eq!(buf.cells().count(), 0);
+    }
+
+    #[test]
+    fn negative_coords_are_clipped_to_buffer() {
+        // Треугольник (-1,-1),(2,-1),(-1,2): внутри x+y <= 1.
+        // Единственный пиксель в буфере с центром внутри — (0,0).
+        let mut buf = make_buffer(4, 4, 1);
+        let verts = [
+            vert(-1.0, -1.0, 0.0, ()),
+            vert(2.0, -1.0, 0.0, ()),
+            vert(-1.0, 2.0, 0.0, ()),
+        ];
+        discretize_triangle(&mut buf, &verts, 1, 0, 0, 0, 4, 4);
+
+        let cells: Vec<_> = buf.cells().map(|(x, y, _, _)| (x, y)).collect();
+        assert_eq!(cells, vec![(0, 0)]);
+    }
+
+    #[test]
+    fn clip_restricts_writes_to_clip_rect() {
+        // Большой треугольник, покрывающий буфер (x+y <= 5).
+        // Клип (1,1,2,2) -> должны остаться только пиксели (1..=2)x(1..=2).
+        let mut buf = make_buffer(4, 4, 1);
+        let verts = [
+            vert(-5.0, -5.0, 0.0, ()),
+            vert(10.0, -5.0, 0.0, ()),
+            vert(-5.0, 10.0, 0.0, ()),
+        ];
+        discretize_triangle(&mut buf, &verts, 1, 0, 1, 1, 2, 2);
+
+        let mut cells: Vec<_> = buf.cells().map(|(x, y, _, _)| (x, y)).collect();
+        cells.sort();
+        assert_eq!(cells, vec![(1, 1), (1, 2), (2, 1), (2, 2)]);
+    }
+
+    #[test]
+    fn layer_and_object_id_are_preserved() {
+        // Слой 2 в трёхслойном буфере.
+        let mut buf = ElementBuffer::<()>::new(4, 4, vec![1, 1, 1]);
+        let verts = [
+            vert(0.5, 0.5, 0.0, ()),
+            vert(1.5, 0.5, 0.0, ()),
+            vert(0.5, 1.5, 0.0, ()),
+        ];
+        discretize_triangle(&mut buf, &verts, 99, 2, 0, 0, 4, 4);
+
+        for (_, _, layer, stack) in buf.cells() {
+            assert_eq!(layer, 2);
+            for el in stack {
+                assert_eq!(el.object_id, 99);
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // discretize_triangle — атрибуты
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn f32_attribute_is_interpolated() {
+        let mut buf = ElementBuffer::<f32>::new(4, 4, vec![1]);
+        let verts = [
+            Vertex::with_depth(0.0, 0.0, 0.0, 100.0),
+            Vertex::with_depth(2.0, 0.0, 0.0, 200.0),
+            Vertex::with_depth(0.0, 2.0, 0.0, 300.0),
+        ];
+        discretize_triangle(&mut buf, &verts, 1, 0, 0, 0, 4, 4);
+
+        // (0,0): 0.5*100 + 0.25*200 + 0.25*300 = 175
+        assert_approx_eq(buf.stack(0, 0, 0).unwrap()[0].attr, 175.0, "attr (0,0)");
+        // (1,0): 0*100 + 0.75*200 + 0.25*300 = 225
+        assert_approx_eq(buf.stack(1, 0, 0).unwrap()[0].attr, 225.0, "attr (1,0)");
+    }
+
+    #[test]
+    fn array_attribute_is_interpolated_component_wise() {
+        let mut buf = ElementBuffer::<[f32; 2]>::new(4, 4, vec![1]);
+        let verts = [
+            Vertex::with_depth(0.0, 0.0, 0.0, [0.0, 10.0]),
+            Vertex::with_depth(2.0, 0.0, 0.0, [20.0, 30.0]),
+            Vertex::with_depth(0.0, 2.0, 0.0, [40.0, 50.0]),
+        ];
+        discretize_triangle(&mut buf, &verts, 1, 0, 0, 0, 4, 4);
+
+        // (0,0): w = (0.5, 0.25, 0.25)
+        // attr[0] = 0.5*0 + 0.25*20 + 0.25*40 = 15
+        // attr[1] = 0.5*10 + 0.25*30 + 0.25*50 = 25
+        let a = buf.stack(0, 0, 0).unwrap()[0].attr;
+        assert_approx_eq(a[0], 15.0, "attr[0]");
+        assert_approx_eq(a[1], 25.0, "attr[1]");
+    }
+
+    /// Атрибут-зонд: возвращает сумму барицентрических весов.
+    /// Позволяет проверить контракт `w[0] + w[1] + w[2] == 1` из `Attributes::bary`.
+    #[derive(Clone, Copy, Debug)]
+    struct WeightSum(f32);
+
+    impl Attributes for WeightSum {
+        fn placeholder() -> Self {
+            WeightSum(0.0)
+        }
+        fn bary(_: &Self, _: &Self, _: &Self, w: [f32; 3]) -> Self {
+            WeightSum(w[0] + w[1] + w[2])
+        }
+    }
+
+    #[test]
+    fn barycentric_weights_sum_to_one() {
+        let mut buf = ElementBuffer::<WeightSum>::new(8, 8, vec![1]);
+        let verts = [
+            Vertex::with_depth(0.0, 0.0, 0.0, WeightSum(0.0)),
+            Vertex::with_depth(7.0, 0.0, 0.0, WeightSum(0.0)),
+            Vertex::with_depth(0.0, 7.0, 0.0, WeightSum(0.0)),
+        ];
+        discretize_triangle(&mut buf, &verts, 1, 0, 0, 0, 8, 8);
+
+        let mut seen = 0;
+        for (x, y, _, stack) in buf.cells() {
+            for el in stack {
+                seen += 1;
+                assert_approx_eq(
+                    el.attr.0,
+                    1.0,
+                    &format!("bary sum at ({},{})", x, y),
+                );
+            }
+        }
+        assert!(seen > 0, "expected at least one written cell");
+    }
+
+    // -----------------------------------------------------------------
+    // discretize_triangle — защита от переполнения и нефинитных данных
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn clip_saturation_keeps_triangle_visible() {
+        // clip_x = 10, clip_w = u32::MAX - 4: без `saturating_add`
+        // `clip_x + clip_w` завернулось бы в 5, и `clip_x2 - 1 = 4`.
+        // Треугольник на x in [25, 30] оказался бы за пределами «завёрнутого» клипа.
+        // С `saturating_add` clip_x2 = u32::MAX, min(buffer.width=100) = 100,
+        // и треугольник полностью виден.
+        let mut buf = make_buffer(100, 10, 1);
+        let verts = [
+            vert(25.0, 1.0, 0.0, ()),
+            vert(25.0, 9.0, 0.0, ()),
+            vert(30.0, 5.0, 0.0, ()),
+        ];
+        discretize_triangle(&mut buf, &verts, 1, 0, 10, 0, u32::MAX - 4, 10);
+        assert!(
+            buf.cells().count() > 0,
+            "triangle lost due to clip overflow"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "non-finite vertex data")]
+    fn nan_x_panics() {
+        let mut buf = make_buffer(4, 4, 1);
+        let verts = [
+            vert(f32::NAN, 0.0, 0.0, ()),
+            vert(1.0, 0.0, 0.0, ()),
+            vert(0.0, 1.0, 0.0, ()),
+        ];
+        discretize_triangle(&mut buf, &verts, 1, 0, 0, 0, 4, 4);
+    }
+
+    #[test]
+    #[should_panic(expected = "non-finite vertex data")]
+    fn infinite_depth_panics() {
+        let mut buf = make_buffer(4, 4, 1);
+        let verts = [
+            vert(0.0, 0.0, f32::INFINITY, ()),
+            vert(1.0, 0.0, 0.0, ()),
+            vert(0.0, 1.0, 0.0, ()),
+        ];
+        discretize_triangle(&mut buf, &verts, 1, 0, 0, 0, 4, 4);
+    }
+
+    #[test]
+    fn bottom_edge_covers_row_zero_when_sampled_at_pixel_center() {
+        // Треугольник с плоским нижним ребром на y = 0.25.
+        // Центр первого пикселя строки 0 — (x + 0.5, 0.5) — выше нижнего ребра,
+        // значит пиксель покрыт. Баговый сэмплинг в (x + 0.5, 0) даёт y = 0 < 0.25,
+        // и вся строка 0 теряется.
+        let mut buf = make_buffer(12, 12, 1);
+        let verts = [
+            vert(0.0, 0.25, 0.0, ()),
+            vert(10.0, 0.25, 0.0, ()),
+            vert(0.0, 10.25, 0.0, ()),
+        ];
+        discretize_triangle(&mut buf, &verts, 1, 0, 0, 0, 12, 12);
+
+        let cells: Vec<(usize, usize)> = buf.cells().map(|(x, y, _, _)| (x, y)).collect();
+
+        // Точка-улика: в баговом варианте сэмпл (0.5, 0) даёт w2 = -0.025,
+        // пиксель не пишется вовсе.
+        assert!(
+            cells.contains(&(0, 0)),
+            "pixel (0,0) should be covered: its center (0.5, 0.5) is inside"
+        );
+
+        // Вся нижняя кромка: центр каждого пикселя строки 0 (x + 0.5, 0.5)
+        // выше нижнего ребра и левее гипотенузы x + y = 10.25, значит
+        // x = 0..=9 покрыты.
+        let row0: Vec<(usize, usize)> =
+            cells.iter().copied().filter(|&(_, y)| y == 0).collect();
+        assert_eq!(
+            row0.len(),
+            10,
+            "bottom row should cover exactly 10 pixels, got {:?}",
+            row0
+        );
+
+        // За гипотенузой — не покрыто.
+        assert!(!cells.contains(&(10, 0)), "pixel (10,0) is outside");
+
+        // Итого: сумма по строкам 10 + 9 + 8 + ... + 1 = 55.
+        // Баговый вариант теряет всю строку 0, остаётся 45.
+        assert_eq!(cells.len(), 55, "total covered cells");
     }
 }
